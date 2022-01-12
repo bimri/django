@@ -52,3 +52,8 @@ class BookContributor(models.Model):
         choices=ContributionRole.choices,
         max_length=20,
     )
+
+
+# class DriverLicence(models.Model):
+#     person = models.OneToOneField(Person, on_delete=models.CASCADE)
+#     licence_number = models.CharField(max_length=50)
