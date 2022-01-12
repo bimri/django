@@ -16,7 +16,14 @@ class Book(models.Model):
         max_length=70,
         publication_date=models.DateField(verbose_name="Date the book was published."),
         isbn=models.CharField(max_length=20, verbose_name="ISBN number of the book."),
+        publisher=models.ForeignKey(Publisher, on_delete=models.CASCADE),
     )
+
+
+"""
+publisher field is establishing a many-to-one relationship
+between Book and Publisher using a foreign key
+"""
 
 
 class Contributor(models.Model):
