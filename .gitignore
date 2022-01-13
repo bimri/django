@@ -57,6 +57,7 @@ coverage.xml
 
 # Django stuff:
 /Bookr/settings.py
+chapter02/Juggler/settings.py
 *.log
 local_settings.py
 db.sqlite3
