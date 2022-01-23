@@ -18,7 +18,7 @@ def book_search(request):
 
 def book_list(request):
     books = Book.objects.all()
-    # books_with_reviews = []
+    book_list = []
     for book in books:
         reviews = book.review_set.all()
         if reviews:
