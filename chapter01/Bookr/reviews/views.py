@@ -1,24 +1,50 @@
 from django.shortcuts import render, get_object_or_404
 
-from .models import Book, Review
+from .forms import SearchForm
+from .models import Book, Contributor
 from .utils import average_rating
 
-def welcome_view (request):
-    return render(request, 'base.html')
 
-    
 def index(request):
-    return render(request, "reviews/base.html")
+    return render(request, "base.html")
 
 
 def book_search(request):
     search_text = request.GET.get("search", "")
-    return render(request, "reviews/search-results.html", {"search_text": search_text})
+    form = SearchForm(request.GET)
+    books = set()
+    if form.is_valid() and form.cleaned_data["search"]:
+        search = form.cleaned_data["search"]
+        search_in = form.cleaned_data.get("search_in") or "title"
+        if search_in == "title":
+            books = Book.objects.filter(title__icontains=search)
+        if search_in == "title":
+            books = Book.objects.filter(title__icontains=search)
+        else:
+            fname_contributors = Contributor.objects.filter(
+                first_names__icontains=search 
+            )
+
+            for contributor in fname_contributors:
+                for book in contributor.book_set.all():
+                    books.add(book)
+
+        lname_contributors = Contributor.objects.filter(last_names__icontains=search)
+
+        for contributor in lname_contributors:
+            for book in contributor.book_set.all():
+                books.add(book)
+
+    return render(
+        request,
+        "reviews/search-results.html",
+        {"form": form, "search_text": search_text, "books": books},
+    )
 
 
 def book_list(request):
     books = Book.objects.all()
-    book_list = []
+    books_with_reviews = []
     for book in books:
         reviews = book.review_set.all()
         if reviews:
@@ -27,7 +53,7 @@ def book_list(request):
         else:
             book_rating = None
             number_of_reviews = 0
-        book_list.append(
+        books_with_reviews.append(
             {
                 "book": book,
                 "book_rating": book_rating,
@@ -35,7 +61,7 @@ def book_list(request):
             }
         )
 
-    context = {"book_list": book_list}
+    context = {"book_list": books_with_reviews}
     return render(request, "reviews/book_list.html", context)
 
 
@@ -48,3 +74,4 @@ def book_detail(request, pk):
     else:
         context = {"book": book, "book_rating": None, "reviews": None}
     return render(request, "reviews/book_detail.html", context)
+  
