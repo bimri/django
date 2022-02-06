@@ -1,213 +1,87 @@
-import re
+import os
+from unittest import mock
 
-from django.contrib.auth.models import User
-from django.test import Client
-from django.test import TestCase
+from PIL import Image
+from django import forms
+from django.conf import settings
+from django.test import TestCase, Client
 from django.utils import timezone
 
-from reviews.forms import ReviewForm
-from reviews.models import Publisher, Book, Review
+from reviews.forms import BookMediaForm
+from reviews.models import Book, Publisher
+from reviews.views import book_media
 
 
-class Activity2Test(TestCase):
-    def setUp(self):
-        publisher_name = "Test Edit Publisher"
-        publisher_website = "http://www.example.com/edit-publisher/"
-        publisher_email = "edit-publisher@example.com"
-        self.publisher = Publisher.objects.create(
-            name=publisher_name, website=publisher_website, email=publisher_email
-        )
-        Book.objects.create(
-            title="Test Book",
-            publication_date=timezone.now(),
-            publisher=self.publisher,
-            isbn=123456,
-        )
+class Activity1Test(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        p = Publisher.objects.create(name='Test Publisher')
+        b = Book.objects.create(title='Test Book', publication_date=timezone.now(), publisher=p)
 
-        User.objects.create(username="testuser", email="testuser@example.com")
-        User.objects.create(username="testuser2", email="testuser2@example.com")
+    def test_form_definition(self):
+        """Test that the BookMediaForm has the correct field."""
+        f = BookMediaForm()
+        self.assertEquals(f.Meta.model, Book)
+        self.assertEquals(f.Meta.fields, ['cover', 'sample'])
+        self.assertIsInstance(f.fields['cover'], forms.ImageField)
+        self.assertIsInstance(f.fields['sample'], forms.FileField)
 
-    def test_rating_field(self):
-        """The rating field should be defined on the form manually."""
-        form = ReviewForm()
-        self.assertEquals(form.fields["rating"].min_value, 0)
-        self.assertEquals(form.fields["rating"].max_value, 5)
-        self.assertTrue(form.fields["rating"].required)
+    def test_form_in_template(self):
+        """Test that the form is in the rendered template."""
+        c = Client()
+        resp = c.get('/books/1/media/')
+        self.assertEquals(resp.status_code, 200)
+        self.assertIn(b'<label for="id_sample">Sample:</label>', resp.content)
+        self.assertIn(b'<label for="id_cover">Cover:</label>', resp.content)
+        self.assertIn(b'<input type="file" name="cover" accept="image/*" id="id_cover">',
+                      resp.content)
+        self.assertIn(b'<input type="file" name="sample" id="id_sample">',
+                      resp.content)
 
-    def test_fields_and_labels_in_view(self):
-        """ "
-        Test that fields and labels/headings exist in the rendered template.
+    @mock.patch('reviews.views.render', name='render')
+    @mock.patch('reviews.views.get_object_or_404', name='get_object_or_404')
+    def test_render_call(self, mock_g_o_o_404 ,mock_render):
+        """Test that the view calls render with the correct arguments and returns it."""
+        request = mock.MagicMock(name='request')
+        resp = book_media(request, 'pk')
+
+        mock_g_o_o_404.assert_called_with(Book, pk='pk')
+        self.assertEquals(resp, mock_render.return_value)
+        self.assertEquals(mock_render.call_args[0][0], request)
+        self.assertEquals(mock_render.call_args[0][1], 'reviews/instance-form.html')
+        self.assertIsInstance(mock_render.call_args[0][2], dict)
+        self.assertEquals(len(mock_render.call_args[0][2]), 4)
+        self.assertIsInstance(mock_render.call_args[0][2]['form'], BookMediaForm)
+        self.assertEquals(mock_render.call_args[0][2]['instance'], mock_g_o_o_404.return_value)
+        self.assertEquals(mock_render.call_args[0][2]['model_type'], 'Book')
+        self.assertEquals(mock_render.call_args[0][2]['is_file_upload'], True)
+
+    def test_book_media_upload(self):
         """
-        c = Client()
-        response = c.get("/books/1/reviews/new/")
-
-        self.assertIsNotNone(
-            re.search(
-                r'<input type="hidden" name="csrfmiddlewaretoken" value="\w+">',
-                response.content.decode("utf8"),
-            )
-        )
-
-        self.assertIn(
-            b'<label for="id_content">Content:</label> <textarea name="content" cols="40" rows="10" '
-            b'required id="id_content">\n</textarea> <span class="helptext">The Review text.</span>',
-            response.content,
-        )
-        self.assertIn(
-            b'<label for="id_rating">Rating:</label> <input type="number" name="rating" min="0" max="5" required '
-            b'id="id_rating">',
-            response.content,
-        )
-        self.assertIn(b'<label for="id_creator">Creator:</label>', response.content)
-        self.assertIn(
-            b'<select name="creator" required id="id_creator">', response.content
-        )
-        self.assertIn(b'<option value="" selected>---------</option>', response.content)
-        self.assertIn(b'<option value="1">testuser</option>', response.content)
-        self.assertIn(b'<option value="2">testuser2</option>', response.content)
-        self.assertNotIn(
-            b'name="date_edited"', response.content
-        )  # book should not be settable through form
-        self.assertNotIn(
-            b'name="book"', response.content
-        )  # book should not be settable through form
-        self.assertIn(
-            b'<button type="submit" class="btn btn-primary">\n        Create\n    </button>',
-            response.content,
-        )
-
-        self.assertIn(b"<p>For Book <em>Test Book (123456)</em></p>", response.content)
-
-    def test_review_create(self):
-        """Test review creation through the ReviewForm"""
-        c = Client()
-        review_content = "A Great Book"
-        review_rating = 3
-        creator_id = 1
-
-        response = c.post(
-            "/books/1/reviews/new/",
-            {"content": review_content, "rating": review_rating, "creator": creator_id},
-        )
-        review = Review.objects.get(pk=1)
-        self.assertEquals(review.content, review_content)
-        self.assertEquals(review.rating, review_rating)
-        self.assertEquals(review.creator_id, creator_id)
-        self.assertEquals(review.book_id, 1)
-        self.assertIsNone(review.date_edited)
-
-        # check redirect for the success message
-        response = c.get(response["location"])
-
-        condensed_content = re.sub(
-            r"\s+", " ", response.content.decode("utf8").replace("\n", "")
-        )
-
-        self.assertIn(
-            '<div class="alert alert-success" role="alert"> Review for &quot;Test Book (123456)&quot; created. </div>',
-            condensed_content,
-        )
-
-    def test_review_no_create(self):
-        """Test that no Review is created if the form is invalid."""
-        self.assertEqual(Review.objects.all().count(), 0)
-        c = Client()
-
-        c.post("/books/1/reviews/new/", {"content": "", "rating": 6, "creator": 0})
-        self.assertEqual(Review.objects.all().count(), 0)
-
-    def test_review_book_mismatch(self):
-        """It should not be possible to load a review unless it's for the right book."""
-        b = Book.objects.create(
-            title="Book2", publication_date=timezone.now(), publisher=self.publisher
-        )
-        Review.objects.create(content="Great.", rating=3, creator_id=1, book=b)
-
-        c = Client()
-        self.assertEquals(c.get("/books/1/").status_code, 200)
-        self.assertEquals(c.get("/books/2/").status_code, 200)
-        self.assertEquals(c.get("/books/2/reviews/1/").status_code, 200)
-        self.assertEquals(c.get("/books/1/reviews/1/").status_code, 404)
-
-    def test_review_edit(self):
+        Test the upload functionality to the book_media view. Check it exists on disk and the image has been resized.
         """
-        Test editing a review, the initial form should have the values from the review being edited. Then no extra
-        review should be created.
-        """
-        review_content = "A real good book."
-        review_rating = 4
+        cover_filename = 'machine-learning-for-algorithmic-trading.png'
+        cover_save_path = os.path.join(settings.MEDIA_ROOT, 'book_covers', cover_filename)
 
-        Review.objects.create(
-            content=review_content, rating=review_rating, creator_id=1, book_id=1
-        )
+        sample_filename = 'machine-learning-for-trading.pdf'
+        sample_save_path = os.path.join(settings.MEDIA_ROOT, 'book_samples', sample_filename)
 
-        c = Client()
+        try:
+            c = Client()
+            with open(os.path.join(settings.BASE_DIR, 'fixtures', cover_filename), 'rb') as cover_fp:
+                with open(os.path.join(settings.BASE_DIR, 'fixtures', sample_filename), 'rb') as sample_fp:
+                    resp = c.post('/books/1/media/', {'cover': cover_fp, 'sample': sample_fp})
 
-        response = c.get("/books/1/reviews/1/")
+            self.assertEquals(resp.status_code, 302)
+            self.assertEquals(resp['Location'], '/books/1/')
 
-        self.assertIn(
-            b'<input type="number" name="rating" value="4" min="0" max="5" required id="id_rating">',
-            response.content,
-        )
-        self.assertIn(b'<option value="1" selected>', response.content)
-        self.assertIn(
-            b'<textarea name="content" cols="40" rows="10" required id="id_content">\nA real good book.'
-            b"</textarea>",
-            response.content,
-        )
-        self.assertIn(
-            b'<button type="submit" class="btn btn-primary">\n        Save\n    </button>',
-            response.content,
-        )
+            with open(cover_save_path, 'rb') as cover_image_fp:
+                cover = Image.open(cover_image_fp)
+                self.assertTrue(cover.width == 300 or cover.height == 300)
 
-        response = c.post(
-            "/books/1/reviews/1/",
-            {"content": "Changed my mind", "rating": 1, "creator": 2},
-        )
+        finally:
+            if os.path.exists(cover_save_path):
+                os.unlink(cover_save_path)
 
-        review = Review.objects.get()
-        self.assertEquals(review.content, "Changed my mind")
-        self.assertEquals(review.rating, 1)
-        self.assertEquals(review.creator_id, 2)
-        self.assertEquals(review.book_id, 1)
-        # the messages will be on the redirected to page
-
-        response = c.get(response["location"])
-
-        condensed_content = re.sub(
-            r"\s+", " ", response.content.decode("utf8").replace("\n", "")
-        )
-
-        self.assertIn(
-            '<div class="alert alert-success" role="alert"> Review for &quot;Test Book (123456)&quot; updated. </div>',
-            condensed_content,
-        )
-
-    def test_404_responses(self):
-        """
-        When trying to get a review for a book that does exist, or get a review that doesn't exist, we should get a 404.
-        """
-        c = Client()
-        response = c.get("/books/123/reviews/new/")
-        self.assertEquals(response.status_code, 404)
-
-        response = c.get("/books/1/reviews/123/")
-        self.assertEquals(response.status_code, 404)
-
-    def test_add_review_link(self):
-        """The add review link should display on the Book detail page."""
-        c = Client()
-        response = c.get("/books/1/")
-        self.assertIn(
-            b'<a class="btn btn-primary" href="/books/1/reviews/new/">Add Review</a>',
-            response.content,
-        )
-
-    def test_review_display(self):
-        """We should see a link to edit a review after creating one."""
-        Review.objects.create(content="Abc123", rating=2, creator_id=1, book_id=1)
-        c = Client()
-        response = c.get("/books/1/")
-        self.assertIn(
-            b'<a href="/books/1/reviews/1/">Edit Review</a>', response.content
-        )
+            if os.path.exists(sample_save_path):
+                os.unlink(sample_save_path)
