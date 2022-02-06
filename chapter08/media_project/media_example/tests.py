@@ -4,29 +4,31 @@ import os
 from django import forms
 from django.conf import settings
 from django.test import LiveServerTestCase, Client
+from media_example.forms import UploadForm
+from media_example.models import ExampleModel
+from media_example.views import media_example
 from urllib.request import urlopen
 
-from media_example.forms import UploadForm
-from media_example.views import media_example
 
-
-class Exercise6Test(LiveServerTestCase):
+class Exercise7Test(LiveServerTestCase):
     def test_form_definition(self):
         """Test that the UploadForm has the correct field."""
         f = UploadForm()
-        self.assertIsInstance(f.fields['image_upload'], forms.ImageField)
-        self.assertIsInstance(f.fields['file_upload'], forms.FileField)
+        self.assertEquals(f.Meta.model, ExampleModel)
+        self.assertEquals(f.Meta.fields, '__all__')
+        self.assertIsInstance(f.fields['image_field'], forms.ImageField)
+        self.assertIsInstance(f.fields['file_field'], forms.FileField)
 
     def test_form_in_template(self):
         """Test that the form is in the rendered template."""
         c = Client()
         resp = c.get('/media-example/')
         self.assertEquals(resp.status_code, 200)
-        self.assertIn(b'<label for="id_file_upload">File upload:</label>', resp.content)
-        self.assertIn(b'<label for="id_image_upload">Image upload:</label>', resp.content)
-        self.assertIn(b'<input type="file" name="image_upload" accept="image/*" required id="id_image_upload">',
+        self.assertIn(b'<label for="id_file_field">File field:</label>', resp.content)
+        self.assertIn(b'<label for="id_image_field">Image field:</label>', resp.content)
+        self.assertIn(b'<input type="file" name="image_field" accept="image/*" required id="id_image_field">',
                       resp.content)
-        self.assertIn(b'<input type="file" name="file_upload" required id="id_file_upload">',
+        self.assertIn(b'<input type="file" name="file_field" required id="id_file_field">',
                       resp.content)
 
     @mock.patch('media_example.views.render', name='render')
@@ -57,7 +59,7 @@ class Exercise6Test(LiveServerTestCase):
             c = Client()
             with open(os.path.join(settings.BASE_DIR, 'fixtures', logo_filename), 'rb') as logo_fp:
                 with open(os.path.join(settings.BASE_DIR, 'fixtures', css_filename), 'rb') as css_fp:
-                    resp = c.post('/media-example/', {'file_upload': css_fp, 'image_upload': logo_fp})
+                    resp = c.post('/media-example/', {'file_field': css_fp, 'image_field': logo_fp})
 
             self.assertEquals(resp.status_code, 200)
             self.assertIn(b'<img src="/media/images/cover.jpg">', resp.content)
