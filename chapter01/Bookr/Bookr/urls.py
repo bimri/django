@@ -15,16 +15,18 @@ Including another URLconf
 """
 from django.conf import settings
 from django.conf.urls.static import static
-from django.contrib import admin
 from django.urls import include, path
 
 from Bookr.views import profile
+from bookr_admin.admin import admin_site
 
 urlpatterns = [
-    path('accounts/', include(('django.contrib.auth.urls', 'auth'), namespace='accounts')),
-    path('admin/', admin.site.urls),
+    path('accounts/', include(('django.contrib.auth.urls', 'auth'),
+         namespace='accounts')),
     path('accounts/profile/', profile, name='profile'),
-    path('', include('reviews.urls'))
+    path('admin/', admin_site.urls),
+    path('', include('reviews.urls')),
+    
 ]
 
 if settings.DEBUG:
