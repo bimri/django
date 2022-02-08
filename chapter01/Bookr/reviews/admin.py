@@ -4,10 +4,12 @@ from reviews.models import (Publisher, Contributor, Book,
 
 
 class BookAdmin(admin.ModelAdmin):
-    date_hierarchy = 'publication_date'
-    list_display = ('title', 'isbn')
-    list_filter = ('publisher', 'publication_date')
-    search_fields = ('title', 'isbn')
+  model = Book
+  list_display = ('title', 'isbn', 'get_publisher', 'publication_date')
+  search_fields = ['title', 'publisher__name']
+
+  def get_publisher(self, obj):
+    return obj.publisher.name
 
 def initialled_name(obj):
     """ obj.first_names='Jerome David', obj.last_names='Salinger'
@@ -19,8 +21,8 @@ class ContributorAdmin(admin.ModelAdmin):
     list_display = ('last_names', 'first_names')
     list_filter = ('last_names',)
     search_fields = ('last_names__startswith', 'first_names')
-    
-    
+
+
 # Register your models here.
 admin.site.register(Publisher)
 admin.site.register(Contributor, ContributorAdmin)
