@@ -1,9 +1,6 @@
-from operator import index
 from django.contrib import admin
-from django.contrib.admin.apps import AdminConfig
 
-class BookrAdmin(AdminConfig):
-    default_site = 'bookr_admin.admin.BookrAdmin'
+class BookrAdmin(admin.AdminSite):
     site_header = "Bookr Administration"
-    site_title = "Bookr"
-    index_title = "Administration Panel"
+    logout_template = "admin/logout.html"
+
